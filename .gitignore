@@ -1,0 +1,26 @@
+# Secrets and local runtime state
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+**/.data/
+**/.runtime/
+**/.test-data/
+**/test-results/
+**/__pycache__/
+**/.venv/
+
+# App data and browser profile must stay outside Git
+Velox_gitpulled/data/
+**/vokabeln_export*.csv
+Browser/Browser/config/
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+
+# Local package/build output
+**/node_modules/
+**/dist/
+**/build/

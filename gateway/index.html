@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>Meine Apps</title>
+    <style>
+      :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #10151d; color: #edf2f8; }
+      * { box-sizing: border-box; }
+      body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 2rem; }
+      main { width: min(900px, 100%); }
+      h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.5rem); letter-spacing: -.04em; }
+      .intro { margin: .6rem 0 2rem; color: #aab7c8; }
+      .apps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+      .card { min-height: 180px; padding: 1.35rem; border: 1px solid #303b49; border-radius: 16px; background: #19212c; color: inherit; text-decoration: none; display: flex; flex-direction: column; transition: transform .15s ease, border-color .15s ease; }
+      a.card:hover, a.card:focus-visible { transform: translateY(-3px); border-color: #79a9ff; outline: none; }
+      .card h2 { margin: 0 0 .5rem; font-size: 1.25rem; }
+      .card p { margin: 0; color: #b4c0ce; line-height: 1.5; }
+      .card span { margin-top: auto; padding-top: 1.4rem; color: #9dc2ff; font-weight: 650; }
+      .card.pending { background: #151b23; color: #8793a1; }
+      .card.pending p, .card.pending span { color: #8793a1; }
+      footer { margin-top: 1.4rem; color: #8390a0; font-size: .9rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Meine Apps</h1>
+      <p class="intro">Wähle eine App aus.</p>
+      <section class="apps" aria-label="Apps">
+        <a class="card" href="https://vokabeln.duckdns.org">
+          <h2>Velox</h2>
+          <p>Latein-Vokabeln lernen, Listen verwalten und Trainings fortsetzen.</p>
+          <span>App öffnen →</span>
+        </a>
+        <a class="card" href="https://webgbt.duckdns.org">
+          <h2>Privatraum</h2>
+          <p>Dein ChatGPT-ähnlicher Chat mit Codex.</p>
+          <span>App öffnen →</span>
+        </a>
+        <a class="card" href="https://browseer.duckdns.org">
+          <h2>Browser</h2>
+          <p>Remote Chromium. Wird nach dem Server-Deployment unter der neuen Adresse erreichbar.</p>
+          <span>Adresse öffnen →</span>
+        </a>
+      </section>
+      <footer>Die Apps behalten ihre bisherigen Adressen und Daten.</footer>
+    </main>
+  </body>
+</html>

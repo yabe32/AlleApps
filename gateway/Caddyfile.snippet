@@ -1,0 +1,22 @@
+# Im vorhandenen Caddyfile den bisherigen webgbt.duckdns.org-Block hiermit
+# ersetzen. Die anderen Site-Blöcke unverändert lassen.
+webgbt.duckdns.org {
+	handle_path /apps* {
+		root * /opt/schule-apps/gateway
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3101
+	}
+}
+
+# Vor dem Aktivieren interaktiv `caddy hash-password` ausfuehren und den
+# Platzhalter durch den erzeugten Hash ersetzen. Keinen Klartext speichern.
+#
+# browseer.duckdns.org {
+#	basic_auth {
+#		browser REPLACE_WITH_CADDY_PASSWORD_HASH
+#	}
+#	reverse_proxy 127.0.0.1:3000
+# }

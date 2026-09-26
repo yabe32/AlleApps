@@ -1,0 +1,69 @@
+name: schule-apps
+
+services:
+  privatraum:
+    build:
+      context: ./webgpt_gitpulled
+    restart: unless-stopped
+    init: true
+    env_file:
+      - /root/privatraum/.env
+    environment:
+      BASE_URL: https://${DOMAIN:?DOMAIN must be set in /root/privatraum/.env}
+      TRUST_PROXY: 'true'
+      MODEL: ${MODEL:-}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-15}
+      TURN_IDLE_TIMEOUT_SECONDS: ${TURN_IDLE_TIMEOUT_SECONDS:-180}
+      CODEX_SANDBOX_MODE: danger-full-access
+    ports:
+      - '127.0.0.1:3101:3001'
+    volumes:
+      - privatraum_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 2g
+
+  velox:
+    build:
+      context: ./Velox_gitpulled
+    restart: unless-stopped
+    init: true
+    user: '${VELOX_UID:-996}:${VELOX_GID:-986}'
+    env_file:
+      - /opt/velox/.env
+    ports:
+      - '127.0.0.1:8090:8090'
+    volumes:
+      - type: bind
+        source: /opt/velox/data
+        target: /opt/velox/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+
+  browser:
+    image: lscr.io/linuxserver/chromium:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: Europe/Berlin
+      LC_ALL: de_DE.UTF-8
+    volumes:
+      - ${BROWSER_CONFIG_DIR:-./Browser/Browser/config}:/config
+    ports:
+      - '127.0.0.1:3000:3000'
+      - '127.0.0.1:3001:3001'
+    shm_size: 1gb
+
+volumes:
+  privatraum_data:
+    external: true
+    name: privatraum_app_data
