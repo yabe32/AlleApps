@@ -10,6 +10,8 @@
 !src/**
 !server/
 !server/**
+!skills/
+!skills/**
 !Dockerfile
 !scripts/
 !scripts/start.mjs

@@ -40,6 +40,15 @@ export class Codex extends EventEmitter implements Rpc {
       `forced_login_method = "chatgpt"\ncli_auth_credentials_store = "file"\nweb_search = "${this.cfg.webSearch}"\nsandbox_mode = "${this.cfg.codexSandboxMode}"\napproval_policy = "on-request"\ndefault_permissions = "chat"\n[permissions.chat.filesystem]\n":minimal" = "read"\n":workspace_roots" = "write"\n[permissions.chat.network]\nenabled = false\n[features]\nimage_generation = true\nshell_tool = false\nunified_exec = false\napps = false\nplugins = false\nmulti_agent = false\nbrowser_use = false\ncomputer_use = false\nmemories = false\nhooks = false\nunbounded_connection_retries = false\n`,
       { mode: 0o600 },
     );
+    const bundledHumanizer = path.join(process.cwd(), 'skills', 'humanizer');
+    if (!fs.existsSync(path.join(bundledHumanizer, 'SKILL.md')))
+      throw Error('Der gebündelte Humanizer-Skill fehlt.');
+    const codexSkills = path.join(this.cfg.codexHome, 'skills');
+    fs.mkdirSync(codexSkills, { recursive: true, mode: 0o700 });
+    fs.cpSync(bundledHumanizer, path.join(codexSkills, 'humanizer'), {
+      recursive: true,
+      force: true,
+    });
     const require = createRequire(import.meta.url);
     const triple =
       process.platform === 'win32'

@@ -2,6 +2,12 @@
 
 Private Chat-Web-App mit Admin-verwalteten Konten: React/TypeScript, Node/Express, SQLite und offizieller Codex App Server über stdio. Keine OpenAI-API-Schlüssel, keine privaten ChatGPT-Endpunkte, keine automatische Übernahme vorhandener ChatGPT-Chats oder Erinnerungen.
 
+## Skills und Lernhilfe
+
+WebGPT bündelt den MIT-lizenzierten Humanizer-Skill in `skills/humanizer`. Beim Start des Codex App Servers wird er nach `CODEX_HOME/skills/humanizer` kopiert; `CODEX_HOME` liegt im persistenten Datenverzeichnis. Die feste Entwickleranweisung bittet Codex, den Skill für jede Antwort intern zur Stilprüfung zu verwenden. Der vollständige mehrstufige Umschreibablauf gilt für ausdrückliche Schreib- und Überarbeitungsaufträge. Die App verspricht nicht, KI-Erkennung zu umgehen oder die Urheberschaft einer Schulabgabe zu verschleiern. Quelle und gepinnter Upstream-Commit stehen in `skills/humanizer/UPSTREAM.txt`.
+
+Bei Schulthemen soll Codex nachvollziehbar erklären und sich am Kenntnisstand der Frage orientieren. Zusätzliche Lern-Skills für Karteikarten, Wiederholungsplanung und Prüfungstraining sind mögliche spätere Ergänzungen; sie werden noch nicht mitinstalliert.
+
 **Entwicklungsweg auf diesem PC: Windows PowerShell → WSL2 Ubuntu.** Die Oberfläche wurde nativ in Edge mit Protokoll-Fixtures geprüft. Ein nativer Codex-Threadstart mit eingeschränktem Dateilesen scheiterte an der vorhandenen unelevated Windows-Sandbox. Derselbe Threadstart funktioniert in WSL2 und im lokalen Linux-Container. Die Rechte wurden nicht aufgeweicht.
 
 Die echte ChatGPT-Anmeldung, Textdeltas, Bildanalyse, Bilderstellung, Bildbearbeitung, Browser-Bildausgabe und Thread-Fortsetzung wurden mit deinem Konto unter WSL2 geprüft. Den tatsächlichen Abnahmestand enthält [docs/TESTING.md](docs/TESTING.md). Fixturetests sind davon getrennt dokumentiert.

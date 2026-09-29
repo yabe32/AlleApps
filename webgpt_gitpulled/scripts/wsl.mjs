@@ -26,7 +26,7 @@ if (command === 'setup-key') {
 const source = run(['wslpath', '-a', process.cwd().replaceAll('\\', '/')], true);
 function sync() {
   // Only source directories go into the dedicated WSL checkout. No credentials or user data.
-  for (const dir of ['src', 'server', 'scripts', 'tests']) {
+  for (const dir of ['src', 'server', 'scripts', 'tests', 'skills']) {
     run(['mkdir', '-p', cfg.work + '/' + dir]);
     run(['rsync', '-rt', '--delete', source + '/' + dir + '/', cfg.work + '/' + dir + '/']);
   }
@@ -89,7 +89,7 @@ if (command === 'dev') {
       }
     }, 300);
   };
-  for (const dir of ['src', 'server', 'scripts'])
+  for (const dir of ['src', 'server', 'scripts', 'skills'])
     watchers.push(fs.watch(dir, { recursive: true }, schedule));
   watchers.push(
     fs.watch('.', { recursive: false }, (_event, file) => {

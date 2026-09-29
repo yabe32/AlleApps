@@ -21,6 +21,7 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node package.json ./
 COPY --chown=node:node scripts/start.mjs ./scripts/start.mjs
+COPY --chown=node:node skills ./skills
 RUN mkdir -p /data && chown node:node /data
 USER node
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3001 DATA_DIR=/data
