@@ -180,6 +180,8 @@ function Login({ configured, done }: { configured: boolean; done: () => void }) 
 function Preferences({ close, onLogout, isAdmin, isSuperuser, openAdmin, openSuperuser }: { close: () => void; onLogout: () => void; isAdmin: boolean; isSuperuser: boolean; openAdmin: () => void; openSuperuser: () => void }) {
   const [status, setStatus] = useState<any>(null),
     [sessions, setSessions] = useState<any[]>([]),
+    [modelPreferences, setModelPreferences] = useState<any>(null),
+    [modelPreferencesLoading, setModelPreferencesLoading] = useState(true),
     [login, setLogin] = useState<any>(),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
@@ -196,6 +198,14 @@ function Preferences({ close, onLogout, isAdmin, isSuperuser, openAdmin, openSup
     const t = setInterval(refresh, 5000);
     return () => clearInterval(t);
   }, [refresh]);
+  useEffect(() => {
+    let active = true;
+    api('/preferences')
+      .then((value) => { if (active) setModelPreferences(value); })
+      .catch((e) => { if (active) setError((e as Error).message); })
+      .finally(() => { if (active) setModelPreferencesLoading(false); });
+    return () => { active = false; };
+  }, []);
   async function action(fn: () => Promise<void>) {
     setBusy(true);
     setError('');
@@ -213,8 +223,88 @@ function Preferences({ close, onLogout, isAdmin, isSuperuser, openAdmin, openSup
     : status?.limits?.rateLimits
       ? [status.limits.rateLimits]
       : [];
+  const effortLabels: Record<string, string> = {
+    minimal: 'Minimal',
+    low: 'Niedrig',
+    medium: 'Mittel',
+    high: 'Hoch',
+    xhigh: 'Sehr hoch (xhigh)',
+    max: 'Maximal',
+  };
+  const effortLabel = (value: string) => effortLabels[value] || value;
+  const saveModelPreferences = (patch: { reasoningEffort?: string; fastMode?: boolean; humanizerEnabled?: boolean }) => {
+    if (!modelPreferences) return;
+    const next = {
+      reasoningEffort: patch.reasoningEffort ?? modelPreferences.reasoningEffort,
+      fastMode: patch.fastMode ?? modelPreferences.fastMode,
+      humanizerEnabled: patch.humanizerEnabled ?? modelPreferences.humanizerEnabled,
+    };
+    void action(async () => {
+      setModelPreferences(await api('/preferences', 'PUT', next));
+    });
+  };
   return (
     <Modal title="Einstellungen" close={close}>
+      <section className="settings-section">
+        <h3>Antwortverhalten</h3>
+        <p className="muted">Diese Auswahl gilt für deine Antworten in allen Chats.</p>
+        <label className="settings-control">
+          <span>
+            <strong>Thinking-Stufe</strong>
+            <small>Legt fest, wie viel Denkaufwand Codex für eine Antwort verwendet.</small>
+          </span>
+          <select
+            aria-label="Thinking-Stufe"
+            value={modelPreferences?.reasoningEffort || ''}
+            disabled={busy || modelPreferencesLoading || !modelPreferences?.effortOptions?.length}
+            onChange={(e) => saveModelPreferences({ reasoningEffort: e.target.value })}
+          >
+            {modelPreferences?.effortOptions?.map((option: any) => (
+              <option key={option.value} value={option.value}>{effortLabel(option.value)}</option>
+            ))}
+          </select>
+        </label>
+        {modelPreferences?.effortOptions?.length ? (
+          <small className="settings-note">
+            {modelPreferences.effortOptions.find((option: any) => option.value === modelPreferences.reasoningEffort)?.description}
+          </small>
+        ) : (
+          <small className="settings-note">
+            {modelPreferencesLoading ? 'Modelloptionen werden geladen …' : 'Thinking-Stufen sind momentan nicht verfügbar.'}
+          </small>
+        )}
+        <label className="settings-toggle">
+          <input
+            type="checkbox"
+            checked={!!modelPreferences?.fastMode}
+            disabled={busy || modelPreferencesLoading || (!modelPreferences?.fastModeAvailable && !modelPreferences?.fastMode)}
+            onChange={(e) => saveModelPreferences({ fastMode: e.target.checked })}
+          />
+          <span>
+            <strong>Fast-Modus</strong>
+            <small>Schnellere Antworten, mit höherem Verbrauch deines ChatGPT-Kontingents.</small>
+          </span>
+        </label>
+        <p className="muted">
+          Modell: {modelPreferences?.modelName || (modelPreferencesLoading ? 'wird geladen …' : 'nicht verfügbar')}.
+          {' '}Tempo und Mehrverbrauch hängen vom Modell und deinem Konto ab.
+        </p>
+        {!modelPreferencesLoading && !modelPreferences?.fastModeAvailable && (
+          <p className="settings-note">Das aktuell gewählte Modell bietet Fast derzeit nicht an.</p>
+        )}
+        <label className="settings-toggle">
+          <input
+            type="checkbox"
+            checked={modelPreferences?.humanizerEnabled ?? true}
+            disabled={busy || modelPreferencesLoading || !modelPreferences}
+            onChange={(e) => saveModelPreferences({ humanizerEnabled: e.target.checked })}
+          />
+          <span>
+            <strong>Humanizer-Stil</strong>
+            <small>Im Hintergrund angewendet; die Antwort erwähnt diese Stilprüfung nicht.</small>
+          </span>
+        </label>
+      </section>
       {isAdmin && <section className="settings-section">
         <h3>ChatGPT-Verbindung</h3>
         <p className="status-line">

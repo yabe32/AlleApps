@@ -4,7 +4,7 @@ Private Chat-Web-App mit Admin-verwalteten Konten: React/TypeScript, Node/Expres
 
 ## Skills und Lernhilfe
 
-WebGPT bündelt den MIT-lizenzierten Humanizer-Skill in `skills/humanizer`. Beim Start des Codex App Servers wird er nach `CODEX_HOME/skills/humanizer` kopiert; `CODEX_HOME` liegt im persistenten Datenverzeichnis. Die feste Entwickleranweisung bittet Codex, den Skill für jede Antwort intern zur Stilprüfung zu verwenden. Der vollständige mehrstufige Umschreibablauf gilt für ausdrückliche Schreib- und Überarbeitungsaufträge. Die App verspricht nicht, KI-Erkennung zu umgehen oder die Urheberschaft einer Schulabgabe zu verschleiern. Quelle und gepinnter Upstream-Commit stehen in `skills/humanizer/UPSTREAM.txt`.
+WebGPT bündelt den MIT-lizenzierten Humanizer-Skill in `skills/humanizer`. Beim Start des Codex App Servers wird er nach `CODEX_HOME/skills/humanizer` kopiert; `CODEX_HOME` liegt im persistenten Datenverzeichnis. In **Einstellungen → Antwortverhalten** kann jedes Konto den Skill ein- und ausschalten; standardmäßig ist er aktiv. Bei aktivem Schalter wird er als separates Eingabeelement für jeden Turn mitgegeben und still angewendet, ohne seine Verwendung in der Antwort zu erwähnen. Implizite automatische Auswahl ist deaktiviert, damit der Ausschalter greift. Der vollständige mehrstufige Umschreibablauf gilt für ausdrückliche Schreib- und Überarbeitungsaufträge. Die App verspricht nicht, KI-Erkennung zu umgehen oder die Urheberschaft einer Schulabgabe zu verschleiern. Quelle und gepinnter Upstream-Commit stehen in `skills/humanizer/UPSTREAM.txt`.
 
 Bei Schulthemen soll Codex nachvollziehbar erklären und sich am Kenntnisstand der Frage orientieren. Zusätzliche Lern-Skills für Karteikarten, Wiederholungsplanung und Prüfungstraining sind mögliche spätere Ergänzungen; sie werden noch nicht mitinstalliert.
 
@@ -67,6 +67,8 @@ Besucher einer eingerichteten Website können auf der Anmeldeseite **Neuen Zugan
 Das Stundenlimit wird vor dem nächsten Codex-Turn erzwungen. Die von Codex gelieferten ChatGPT-Nutzungslimits gelten dagegen für das verbundene ChatGPT-Konto insgesamt und können technisch nicht einzelnen Website-Konten zugeteilt werden. Deaktivieren widerruft alle Sitzungen dieses Kontos. Mindestens ein aktiver Admin bleibt geschützt.
 
 Admins und Superuser sehen diese globalen Codex-Nutzungslimits. Im selben Panel lässt sich unter **Globales Modell** ein Modell aus dem aktuellen Codex-Katalog auswählen. Die Auswahl wird in der App-Datenbank gespeichert und gilt für alle folgenden beziehungsweise wieder aufgenommenen Gespräche. Laufende Antworten müssen vorher beendet werden. Angezeigt werden nur im Katalog sichtbare Modelle mit Bildeingabe, damit Uploads weiterhin funktionieren; die verfügbare Liste und Kontolimits kommen vom angemeldeten ChatGPT-Codex-Konto.
+
+Jedes Konto kann unter **Einstellungen → Antwortverhalten** die vom gewählten Modell unterstützte Thinking-Stufe setzen und Fast-Modus ein- oder ausschalten. Fast wird nur an Codex weitergegeben, wenn der aktuelle Modellkatalog diese Stufe anbietet. Fast kann schneller antworten und mehr ChatGPT-Kontingent verbrauchen; Tempo und Verbrauch sind modell- und kontoabhängig.
 
 Das Admin-Panel zeigt außerdem die von Codex gemeldeten Tokenwerte je Website-Konto: Gesamt, laufende fünf Stunden, laufende Woche sowie Eingabe- und Ausgabeanteile einschließlich Reasoning. Die Werte werden pro Turn überschrieben, falls Codex einen präziseren Zwischenstand liefert. Mitglieder erhalten weder diesen Endpunkt noch eine Tokenanzeige.
 

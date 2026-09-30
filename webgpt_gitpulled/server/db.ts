@@ -159,6 +159,16 @@ CREATE INDEX project_tasks_project ON project_tasks(project_id,completed_at,upda
 CREATE TABLE backups(id TEXT PRIMARY KEY,path TEXT NOT NULL,created_at INTEGER NOT NULL,status TEXT NOT NULL,error TEXT);
 INSERT OR IGNORE INTO settings(key,value) VALUES ('retention_days','30');
 `,
+  `
+CREATE TABLE user_preferences(
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  reasoning_effort TEXT NOT NULL DEFAULT 'medium',
+  fast_mode INTEGER NOT NULL DEFAULT 0 CHECK(fast_mode IN (0,1))
+);
+`,
+  `
+ALTER TABLE user_preferences ADD COLUMN humanizer_enabled INTEGER NOT NULL DEFAULT 1 CHECK(humanizer_enabled IN (0,1));
+`,
 ];
 export class Store {
   db: Database.Database;

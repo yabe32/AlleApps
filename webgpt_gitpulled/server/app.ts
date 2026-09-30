@@ -14,6 +14,7 @@ import { Auth } from './auth.js';
 import { Artifacts } from './artifacts.js';
 import { Chats, friendly } from './chat.js';
 import type { Rpc } from './codex.js';
+import { currentModelCapabilities, supportsFastMode } from './model-capabilities.js';
 const id = z.string().uuid(),
   credentials = z.object({
     username: z.string().trim().min(1).max(80),
@@ -31,6 +32,11 @@ const managedUser = z.object({
   webSearchLimitPerHour: z.number().int().min(0).max(100000).default(0),
   uploadLimitMb: z.number().int().min(0).max(1024).default(0),
   parallelTurnLimit: z.number().int().min(1).max(100).default(1),
+});
+const modelPreferencesInput = z.object({
+  reasoningEffort: z.string().trim().min(1).max(40),
+  fastMode: z.boolean(),
+  humanizerEnabled: z.boolean(),
 });
 export function createApp(cfg: Config, rpc: Rpc) {
   const app = express(),
@@ -111,6 +117,52 @@ export function createApp(cfg: Config, rpc: Rpc) {
     res.status(202).json({ ok: true, message: 'Antrag gespeichert. Ein Admin muss das Konto noch aktivieren.' });
   });
   app.use('/api', auth.require);
+  const readModelPreferences = async (userId: string) => {
+    const saved = store.get<{ reasoning_effort: string; fast_mode: number; humanizer_enabled: number }>(
+      'SELECT reasoning_effort,fast_mode,humanizer_enabled FROM user_preferences WHERE user_id=?',
+      userId,
+    );
+    const selectedModel = store.setting('global_model') || cfg.model;
+    const model = await currentModelCapabilities(rpc, selectedModel);
+    const effortOptions = model?.supportedReasoningEfforts || [];
+    const savedEffortIsSupported = effortOptions.some(
+      (option) => option.reasoningEffort === saved?.reasoning_effort,
+    );
+    const defaultEffort = effortOptions.find(
+      (option) => option.reasoningEffort === model?.defaultReasoningEffort,
+    )?.reasoningEffort;
+    return {
+      reasoningEffort: savedEffortIsSupported
+        ? saved?.reasoning_effort
+        : defaultEffort || effortOptions[0]?.reasoningEffort || saved?.reasoning_effort || 'medium',
+      fastMode: !!saved?.fast_mode,
+      humanizerEnabled: saved?.humanizer_enabled !== 0,
+      effortOptions: effortOptions.map((option) => ({
+        value: option.reasoningEffort,
+        description: option.description,
+      })),
+      fastModeAvailable: supportsFastMode(model),
+      modelName: model?.displayName || selectedModel || 'Codex-Standardmodell',
+    };
+  };
+  app.get('/api/preferences', async (_req, res) => {
+    res.json(await readModelPreferences(res.locals.session.user_id));
+  });
+  app.put('/api/preferences', async (req, res) => {
+    const value = modelPreferencesInput.parse(req.body);
+    const preferences = await readModelPreferences(res.locals.session.user_id);
+    if (preferences.effortOptions.length && !preferences.effortOptions.some((option) => option.value === value.reasoningEffort))
+      throw Object.assign(Error('Diese Thinking-Stufe wird vom aktuellen Modell nicht unterstützt.'), { status: 400 });
+    store.run(
+      `INSERT INTO user_preferences(user_id,reasoning_effort,fast_mode,humanizer_enabled) VALUES (?,?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET reasoning_effort=excluded.reasoning_effort,fast_mode=excluded.fast_mode,humanizer_enabled=excluded.humanizer_enabled`,
+      res.locals.session.user_id,
+      value.reasoningEffort,
+      value.fastMode ? 1 : 0,
+      value.humanizerEnabled ? 1 : 0,
+    );
+    res.json({ ...preferences, reasoningEffort: value.reasoningEffort, fastMode: value.fastMode, humanizerEnabled: value.humanizerEnabled });
+  });
   app.post('/api/auth/logout', (req, res) => {
     auth.logout(req, res);
     res.json({ ok: true });

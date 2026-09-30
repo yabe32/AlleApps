@@ -700,6 +700,52 @@ dialog::backdrop {
   margin-bottom: 20px;
   border-bottom: 1px solid var(--line);
 }
+.settings-control,
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0 10px;
+}
+.settings-control > span,
+.settings-toggle > span {
+  display: grid;
+  gap: 4px;
+}
+.settings-control strong,
+.settings-toggle strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+.settings-control small,
+.settings-toggle small,
+.settings-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.settings-control select {
+  min-width: 128px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.settings-toggle {
+  justify-content: flex-start;
+  cursor: pointer;
+}
+.settings-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+.settings-note {
+  display: block;
+  margin: 8px 0;
+}
 h3 {
   font-size: 13px;
   margin: 20px 0 12px;
