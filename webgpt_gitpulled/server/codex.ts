@@ -10,7 +10,7 @@ export interface Rpc extends EventEmitter {
   close(): void;
   ready: boolean;
 }
-export const CODEX_VERSION = '0.153.4';
+export const CODEX_VERSION = '0.159.2';
 export class Codex extends EventEmitter implements Rpc {
   ready = false;
   private child?: ChildProcessWithoutNullStreams;
@@ -46,6 +46,13 @@ export class Codex extends EventEmitter implements Rpc {
     const codexSkills = path.join(this.cfg.codexHome, 'skills');
     fs.mkdirSync(codexSkills, { recursive: true, mode: 0o700 });
     fs.cpSync(bundledHumanizer, path.join(codexSkills, 'humanizer'), {
+      recursive: true,
+      force: true,
+    });
+    const bundledCleanText = path.join(process.cwd(), 'skills', 'clean-user-facing-text');
+    if (!fs.existsSync(path.join(bundledCleanText, 'SKILL.md')))
+      throw Error('Der gebündelte Textpflege-Skill fehlt.');
+    fs.cpSync(bundledCleanText, path.join(codexSkills, 'clean-user-facing-text'), {
       recursive: true,
       force: true,
     });

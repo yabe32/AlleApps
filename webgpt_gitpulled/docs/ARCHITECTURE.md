@@ -51,7 +51,7 @@ Arbeitsdateien werden nur nach ausdrücklicher Dateianforderung in einem Gesprä
 
 ## Version und offizielle Quellen
 
-Codex **0.153.4**, exakt in `package.json`/Lockfile. Die Protokolltypen wurden mit `codex app-server generate-ts --out .protocol` aus dieser installierten Version erzeugt und bei der Umsetzung geprüft. `.protocol` ist eine lokale Diagnoseausgabe, kein Laufzeitdownload. `imageGeneration` und einzelne Protokollfelder können sich ändern; vor Updates neu erzeugen und die Live-Abnahme wiederholen. Es wird kein experimenteller API-Handshake aktiviert.
+Codex **0.159.2**, exakt in `package.json`/Lockfile. Die lokale Protokollreferenz `.protocol` wurde mit Codex 0.153.4 erzeugt; sie ist eine Diagnoseausgabe und kein Laufzeitdownload. `imageGeneration`, Modellkatalog und einzelne Protokollfelder können sich ändern; vor weiteren Updates neu erzeugen und die Live-Abnahme wiederholen. Es wird kein experimenteller API-Handshake aktiviert.
 
 Am 12.09.2026 geprüft:
 

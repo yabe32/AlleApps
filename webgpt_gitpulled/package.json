@@ -30,7 +30,7 @@
     "format": "prettier --write src server scripts tests"
   },
   "dependencies": {
-    "@openai/codex": "0.153.4",
+    "@openai/codex": "0.159.2",
     "archiver": "^8.0.0",
     "argon2": "^0.44.0",
     "better-sqlite3": "^11.10.0",
