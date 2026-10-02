@@ -56,6 +56,13 @@ export class Codex extends EventEmitter implements Rpc {
       recursive: true,
       force: true,
     });
+    const bundledDeepResearch = path.join(process.cwd(), 'skills', 'deep-research');
+    if (!fs.existsSync(path.join(bundledDeepResearch, 'SKILL.md')))
+      throw Error('Der gebündelte Rechercheleitfaden fehlt.');
+    fs.cpSync(bundledDeepResearch, path.join(codexSkills, 'deep-research'), {
+      recursive: true,
+      force: true,
+    });
     const require = createRequire(import.meta.url);
     const triple =
       process.platform === 'win32'

@@ -12,6 +12,8 @@
   --accent: #94c7ad;
   --soft: #202a2e;
   --hover: #253136;
+  --research-bg: #edf3e9;
+  --research-ink: #314a2e;
   color-scheme: dark;
 }
 * {
@@ -399,6 +401,50 @@ p {
 }
 .composer:focus-within {
   border-color: #a3b49b;
+}
+.research-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0 3px 12px;
+}
+.research-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+.research-toggle.active {
+  border-color: var(--accent);
+  background: var(--research-bg);
+  color: var(--research-ink);
+}
+.research-toggle:disabled {
+  opacity: .55;
+}
+.research-state {
+  font-size: 9px;
+  opacity: .75;
+}
+.research-hint {
+  color: var(--muted);
+  font-size: 10px;
+}
+.research-badge {
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--research-bg);
+  color: var(--research-ink);
+  font-size: 9px;
+  font-weight: 500;
 }
 .composer textarea {
   border: 0;
@@ -1029,6 +1075,8 @@ dialog > p {
   --accent: #264f43;
   --soft: #e4ebe0;
   --hover: #e9ece4;
+  --research-bg: #edf3e9;
+  --research-ink: #314a2e;
   color-scheme: light;
 }
 [data-theme='dark'] {
@@ -1041,6 +1089,8 @@ dialog > p {
   --accent: #729a80;
   --soft: #2c3d30;
   --hover: #2c3c30;
+  --research-bg: #344934;
+  --research-ink: #e0e6db;
   color-scheme: dark;
 }
 [data-theme='dark'] .chat-link.selected {

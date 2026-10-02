@@ -33,6 +33,7 @@ export type Turn = {
   status: string;
   error: string | null;
   created_at: number;
+  research_mode: number;
 };
 export type Message = {
   id: string;
@@ -168,6 +169,12 @@ CREATE TABLE user_preferences(
 `,
   `
 ALTER TABLE user_preferences ADD COLUMN humanizer_enabled INTEGER NOT NULL DEFAULT 1 CHECK(humanizer_enabled IN (0,1));
+`,
+  `
+ALTER TABLE turns ADD COLUMN research_mode INTEGER NOT NULL DEFAULT 0 CHECK(research_mode IN (0,1));
+`,
+  `
+ALTER TABLE user_preferences ADD COLUMN clean_text_enabled INTEGER NOT NULL DEFAULT 1 CHECK(clean_text_enabled IN (0,1));
 `,
 ];
 export class Store {

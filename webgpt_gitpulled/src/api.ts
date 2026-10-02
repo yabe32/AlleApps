@@ -34,5 +34,5 @@ export type Message = {
   text: string;
   attachments: string[];
 };
-export type Turn = { id: string; status: string; error: string | null };
+export type Turn = { id: string; status: string; error: string | null; research_mode: number };
 export type Snapshot = { chat: Chat; messages: Message[]; turns: Turn[]; eventId: number };

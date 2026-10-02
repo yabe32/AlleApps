@@ -232,12 +232,13 @@ function Preferences({ close, onLogout, isAdmin, isSuperuser, openAdmin, openSup
     max: 'Maximal',
   };
   const effortLabel = (value: string) => effortLabels[value] || value;
-  const saveModelPreferences = (patch: { reasoningEffort?: string; fastMode?: boolean; humanizerEnabled?: boolean }) => {
+  const saveModelPreferences = (patch: { reasoningEffort?: string; fastMode?: boolean; humanizerEnabled?: boolean; cleanTextEnabled?: boolean }) => {
     if (!modelPreferences) return;
     const next = {
       reasoningEffort: patch.reasoningEffort ?? modelPreferences.reasoningEffort,
       fastMode: patch.fastMode ?? modelPreferences.fastMode,
       humanizerEnabled: patch.humanizerEnabled ?? modelPreferences.humanizerEnabled,
+      cleanTextEnabled: patch.cleanTextEnabled ?? modelPreferences.cleanTextEnabled,
     };
     void action(async () => {
       setModelPreferences(await api('/preferences', 'PUT', next));
@@ -302,6 +303,18 @@ function Preferences({ close, onLogout, isAdmin, isSuperuser, openAdmin, openSup
           <span>
             <strong>Humanizer-Stil</strong>
             <small>Im Hintergrund angewendet; die Antwort erwähnt diese Stilprüfung nicht.</small>
+          </span>
+        </label>
+        <label className="settings-toggle">
+          <input
+            type="checkbox"
+            checked={modelPreferences?.cleanTextEnabled ?? true}
+            disabled={busy || modelPreferencesLoading || !modelPreferences}
+            onChange={(e) => saveModelPreferences({ cleanTextEnabled: e.target.checked })}
+          />
+          <span>
+            <strong>Textpflege</strong>
+            <small>Zusätzliche Formulierungshilfe im Hintergrund. Wasserzeichen und Herkunftshinweise bleiben erhalten.</small>
           </span>
         </label>
       </section>
@@ -692,6 +705,7 @@ function App() {
     [selected, setSelected] = useState<string | null>(null),
     [snap, setSnap] = useState<Snapshot | null>(null),
     [draft, setDraft] = useState(''),
+    [deepResearch, setDeepResearch] = useState(false),
     [attachments, setAttachments] = useState<string[]>([]),
     [uploading, setUploading] = useState(false),
     [sending, setSending] = useState(false),
@@ -740,6 +754,14 @@ function App() {
     window.addEventListener('signed-out', out);
     return () => window.removeEventListener('signed-out', out);
   }, [refreshAuth]);
+  useEffect(() => {
+    const userId = auth?.user?.id;
+    if (!userId) {
+      setDeepResearch(false);
+      return;
+    }
+    setDeepResearch(localStorage.getItem(`deepResearch:${userId}`) === 'true');
+  }, [auth?.user?.id]);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     localStorage.setItem('theme', dark ? 'dark' : 'light');
@@ -923,7 +945,7 @@ function App() {
         cid = c.id;
         setSelected(cid);
       }
-      const body = { text: draft, attachments };
+      const body = { text: draft, attachments, deepResearch };
       const signature = JSON.stringify({ cid, ...body });
       if (pending.current?.signature !== signature)
         pending.current = { signature, key: crypto.randomUUID() };
@@ -1148,6 +1170,9 @@ function App() {
                         <span className="mini-mark">A</span> ASSISTENT
                       </>
                     )}
+                    {m.role === 'user' && snap.turns.some((turn) => turn.id === m.turn_id && turn.research_mode) && (
+                      <span className="research-badge">Tiefenrecherche</span>
+                    )}
                   </div>
                   <RenderMessage m={m} zoom={setZoom} chatId={snap.chat.id} />
                   <div className="message-actions">
@@ -1220,6 +1245,28 @@ function App() {
               void upload(e.dataTransfer.files);
             }}
           >
+            <div className="research-control">
+              <button
+                type="button"
+                className={'research-toggle' + (deepResearch ? ' active' : '')}
+                aria-pressed={deepResearch}
+                disabled={running || sending}
+                onClick={() => setDeepResearch((enabled) => {
+                  const next = !enabled;
+                  localStorage.setItem(`deepResearch:${auth.user.id}`, String(next));
+                  return next;
+                })}
+              >
+                <Search size={15} />
+                <span>Tiefenrecherche</span>
+                <span className="research-state">{deepResearch ? 'Ein' : 'Aus'}</span>
+              </button>
+              {deepResearch && (
+                <span className="research-hint">
+                  Mehrere Such- und Prüfrunden mit der integrierten Websuche · kann länger dauern
+                </span>
+              )}
+            </div>
             {attachments.length > 0 && (
               <div className="attachments">
                 {attachments.map((id) => (

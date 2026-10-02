@@ -37,6 +37,7 @@ const modelPreferencesInput = z.object({
   reasoningEffort: z.string().trim().min(1).max(40),
   fastMode: z.boolean(),
   humanizerEnabled: z.boolean(),
+  cleanTextEnabled: z.boolean().optional(),
 });
 export function createApp(cfg: Config, rpc: Rpc) {
   const app = express(),
@@ -118,8 +119,8 @@ export function createApp(cfg: Config, rpc: Rpc) {
   });
   app.use('/api', auth.require);
   const readModelPreferences = async (userId: string) => {
-    const saved = store.get<{ reasoning_effort: string; fast_mode: number; humanizer_enabled: number }>(
-      'SELECT reasoning_effort,fast_mode,humanizer_enabled FROM user_preferences WHERE user_id=?',
+    const saved = store.get<{ reasoning_effort: string; fast_mode: number; humanizer_enabled: number; clean_text_enabled: number }>(
+      'SELECT reasoning_effort,fast_mode,humanizer_enabled,clean_text_enabled FROM user_preferences WHERE user_id=?',
       userId,
     );
     const selectedModel = store.setting('global_model') || cfg.model;
@@ -137,6 +138,7 @@ export function createApp(cfg: Config, rpc: Rpc) {
         : defaultEffort || effortOptions[0]?.reasoningEffort || saved?.reasoning_effort || 'medium',
       fastMode: !!saved?.fast_mode,
       humanizerEnabled: saved?.humanizer_enabled !== 0,
+      cleanTextEnabled: saved?.clean_text_enabled !== 0,
       effortOptions: effortOptions.map((option) => ({
         value: option.reasoningEffort,
         description: option.description,
@@ -151,17 +153,19 @@ export function createApp(cfg: Config, rpc: Rpc) {
   app.put('/api/preferences', async (req, res) => {
     const value = modelPreferencesInput.parse(req.body);
     const preferences = await readModelPreferences(res.locals.session.user_id);
+    const cleanTextEnabled = value.cleanTextEnabled ?? preferences.cleanTextEnabled;
     if (preferences.effortOptions.length && !preferences.effortOptions.some((option) => option.value === value.reasoningEffort))
       throw Object.assign(Error('Diese Thinking-Stufe wird vom aktuellen Modell nicht unterstützt.'), { status: 400 });
     store.run(
-      `INSERT INTO user_preferences(user_id,reasoning_effort,fast_mode,humanizer_enabled) VALUES (?,?,?,?)
-       ON CONFLICT(user_id) DO UPDATE SET reasoning_effort=excluded.reasoning_effort,fast_mode=excluded.fast_mode,humanizer_enabled=excluded.humanizer_enabled`,
+      `INSERT INTO user_preferences(user_id,reasoning_effort,fast_mode,humanizer_enabled,clean_text_enabled) VALUES (?,?,?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET reasoning_effort=excluded.reasoning_effort,fast_mode=excluded.fast_mode,humanizer_enabled=excluded.humanizer_enabled,clean_text_enabled=excluded.clean_text_enabled`,
       res.locals.session.user_id,
       value.reasoningEffort,
       value.fastMode ? 1 : 0,
       value.humanizerEnabled ? 1 : 0,
+      cleanTextEnabled ? 1 : 0,
     );
-    res.json({ ...preferences, reasoningEffort: value.reasoningEffort, fastMode: value.fastMode, humanizerEnabled: value.humanizerEnabled });
+    res.json({ ...preferences, reasoningEffort: value.reasoningEffort, fastMode: value.fastMode, humanizerEnabled: value.humanizerEnabled, cleanTextEnabled });
   });
   app.post('/api/auth/logout', (req, res) => {
     auth.logout(req, res);
@@ -574,13 +578,13 @@ export function createApp(cfg: Config, rpc: Rpc) {
   });
   app.post('/api/chats/:id/send', async (req, res) => {
     const v = z
-      .object({ key: id, text: z.string().max(100000), attachments: z.array(id).max(6) })
+      .object({ key: id, text: z.string().max(100000), attachments: z.array(id).max(6), deepResearch: z.boolean().default(false) })
       .refine((v) => v.text.trim() || v.attachments.length)
       .parse(req.body);
     for (const f of v.attachments)
       if (!store.get('SELECT id FROM artifacts WHERE id=? AND user_id=?', f, res.locals.session.user_id))
         throw Object.assign(Error('Bild nicht gefunden.'), { status: 404 });
-    res.status(202).json(await chats.send(id.parse(req.params.id), v.key, v.text, v.attachments, res.locals.session.user_id));
+    res.status(202).json(await chats.send(id.parse(req.params.id), v.key, v.text, v.attachments, res.locals.session.user_id, v.deepResearch));
   });
   app.post('/api/chats/:id/stop', async (req, res) => {
     await chats.stop(id.parse(req.params.id), res.locals.session.user_id);

@@ -3,4 +3,4 @@ Fetched: 2026-10-01 from the main branch
 
 This text-only skill is bundled for authorized prose cleanup in chat. WebGPT does not enable the repository's separate HTTP-service workflow. The original upstream SKILL.md is preserved as UPSTREAM-SKILL.md; the active SKILL.md is a WebGPT-specific editorial adaptation.
 
-WebGPT integration: this skill is attached on every turn and silently guides suitable response prose. The app-specific instructions preserve meaning, facts, citations, quotations, code, and required disclosures; they prohibit detector evasion, watermark removal, script claims, and edits to uploaded files unless explicitly requested.
+WebGPT integration: when the account's Textpflege preference is enabled, this skill is attached to each turn and silently guides suitable response prose. The preference defaults to enabled for existing and new accounts. When disabled, the skill is omitted from turns. The app-specific instructions preserve meaning, facts, citations, quotations, code, and required disclosures; they prohibit detector evasion, watermark removal, script claims, and edits to uploaded files unless explicitly requested.
