@@ -26,13 +26,14 @@ export async function api<T = any>(url: string, method = 'GET', body?: any): Pro
   }
   return data;
 }
-export type Chat = { id: string; title: string; parent_id: string | null; updated_at: number };
+export type Chat = { id: string; title: string; parent_id: string | null; updated_at: number; provider: 'codex' | 'antigravity'; antigravity_conversation_id?: string | null };
 export type Message = {
   id: string;
   turn_id: string;
   role: string;
   text: string;
   attachments: string[];
+  attachmentMeta?: Record<string, { mime: string; name: string | null }>;
 };
 export type Turn = { id: string; status: string; error: string | null; research_mode: number };
 export type Snapshot = { chat: Chat; messages: Message[]; turns: Turn[]; eventId: number };

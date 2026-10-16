@@ -409,6 +409,22 @@ p {
   gap: 8px 12px;
   margin: 0 3px 12px;
 }
+.provider-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.provider-control select {
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
 .research-toggle {
   display: inline-flex;
   align-items: center;
@@ -633,6 +649,13 @@ p {
   object-fit: contain;
   border-radius: 11px;
   background: var(--side);
+}
+.message-video {
+  display: block;
+  width: min(560px, 100%);
+  max-height: 420px;
+  border-radius: 11px;
+  background: #111;
 }
 .image-button {
   padding: 0;

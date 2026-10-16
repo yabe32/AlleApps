@@ -10,6 +10,8 @@ export type Chat = {
   created_at: number;
   updated_at: number;
   user_id?: string | null;
+  provider: 'codex' | 'antigravity';
+  antigravity_conversation_id: string | null;
 };
 export type User = {
   id: string;
@@ -176,6 +178,10 @@ ALTER TABLE turns ADD COLUMN research_mode INTEGER NOT NULL DEFAULT 0 CHECK(rese
   `
 ALTER TABLE user_preferences ADD COLUMN clean_text_enabled INTEGER NOT NULL DEFAULT 1 CHECK(clean_text_enabled IN (0,1));
 `,
+  `
+ALTER TABLE chats ADD COLUMN provider TEXT NOT NULL DEFAULT 'codex' CHECK(provider IN ('codex','antigravity'));
+ALTER TABLE chats ADD COLUMN antigravity_conversation_id TEXT;
+`,
 ];
 export class Store {
   db: Database.Database;
@@ -222,11 +228,12 @@ export class Store {
     thread: string | null = null,
     parent: string | null = null,
     userId?: string,
+    provider: 'codex' | 'antigravity' = 'codex',
   ) {
     const id = randomUUID(),
       now = Date.now();
     this.run(
-      'INSERT INTO chats(id,title,thread_id,parent_id,created_at,updated_at,user_id) VALUES (?,?,?,?,?,?,?)',
+      'INSERT INTO chats(id,title,thread_id,parent_id,created_at,updated_at,user_id,provider) VALUES (?,?,?,?,?,?,?,?)',
       id,
       title,
       thread,
@@ -234,6 +241,7 @@ export class Store {
       now,
       now,
       userId || null,
+      provider,
     );
     return this.chat(id)!;
   }
@@ -245,7 +253,21 @@ export class Store {
       messages: this.all<Message>(
         'SELECT * FROM messages WHERE chat_id=? ORDER BY ordinal',
         id,
-      ).map((m) => ({ ...m, attachments: JSON.parse(m.attachments) })),
+      ).map((m) => {
+        const attachments = JSON.parse(m.attachments) as string[];
+        const attachmentMeta: Record<string, { mime: string; name: string | null }> = {};
+        for (const artifactId of attachments) {
+          const artifact = chat.user_id
+            ? this.get<{ mime: string; original_name: string | null }>(
+                'SELECT mime,original_name FROM artifacts WHERE id=? AND user_id=?', artifactId, chat.user_id,
+              )
+            : this.get<{ mime: string; original_name: string | null }>(
+                'SELECT mime,original_name FROM artifacts WHERE id=?', artifactId,
+              );
+          if (artifact) attachmentMeta[artifactId] = { mime: artifact.mime, name: artifact.original_name };
+        }
+        return { ...m, attachments, attachmentMeta };
+      }),
       turns: this.all<Turn>('SELECT * FROM turns WHERE chat_id=? ORDER BY created_at', id),
       eventId: this.get<{ id: number }>(
         'SELECT COALESCE(MAX(id),0) id FROM events WHERE chat_id=?',

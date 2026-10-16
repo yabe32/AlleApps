@@ -28,7 +28,7 @@ export function configuration(env: NodeJS.ProcessEnv = process.env) {
     host: env.HOST || '127.0.0.1',
     port: Number(env.PORT || 3001),
     trustProxy: env.TRUST_PROXY === 'true',
-    maxUpload: Number(env.MAX_UPLOAD_MB || 15) * 1024 * 1024,
+    maxUpload: Number(env.MAX_UPLOAD_MB || 100) * 1024 * 1024,
     turnIdleMs: turnIdleSeconds * 1000,
     model: env.MODEL || undefined,
     webSearch: webSearch as 'disabled' | 'cached' | 'indexed' | 'live',

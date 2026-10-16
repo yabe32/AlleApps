@@ -1,6 +1,16 @@
 # Chat
 
-Private Chat-Web-App mit Admin-verwalteten Konten: React/TypeScript, Node/Express, SQLite und offizieller Codex App Server über stdio. Keine OpenAI-API-Schlüssel, keine privaten ChatGPT-Endpunkte, keine automatische Übernahme vorhandener ChatGPT-Chats oder Erinnerungen.
+Private Chat-Web-App mit Admin-verwalteten Konten: React/TypeScript, Node/Express und SQLite. ChatGPT läuft über den offiziellen Codex App Server. Gemini läuft über die offizielle Antigravity-CLI auf dem persönlichen Windows-PC und verwendet das dort angemeldete Google-Konto; die App speichert keine Google-Anmeldedaten. Neue Unterhaltungen können zwischen ChatGPT und Gemini gewählt werden.
+
+## Gemini mit dem persönlichen Google-Konto
+
+1. Installiere die offizielle Antigravity-CLI unter Windows mit `irm https://antigravity.google/cli/install.ps1 | iex` und melde dich einmal in einer PowerShell mit `agy` bei deinem Google-Konto an. Die CLI speichert die Anmeldung über den Windows Credential Manager.
+2. Starte die lokale WebGPT-Brücke aus diesem Ordner mit `npm run antigravity:bridge`. Lass das Terminal geöffnet, solange du Gemini in WebGPT nutzt. Die Brücke lauscht ausschließlich auf `127.0.0.1:34791`; erlaube den lokalen Netzwerkzugriff, falls dein Browser danach fragt.
+3. Wähle im Chat **Gemini (Google AI Pro)** als Modell für neue Unterhaltungen. ChatGPT-Unterhaltungen bleiben bei ChatGPT.
+
+Für die lokale Entwicklung muss der WebGPT-Ursprung freigegeben werden, zum Beispiel in PowerShell mit `$env:ANTIGRAVITY_ALLOWED_ORIGIN='http://localhost:5173'` vor dem Start der Brücke. Standardmäßig ist `https://webgbt.duckdns.org` freigegeben. Der Bridge-Prozess kann mit `ANTIGRAVITY_ALLOWED_ORIGIN` auf mehrere kommaseparierte Ursprünge eingestellt werden.
+
+Gemini-Anhänge unterstützen Bilder sowie MP4, MOV, WebM und AVI; die CLI erhält sie als Dateien in einem temporären Arbeitsordner. Gemini kann außerdem erzeugte PNG-Bilder als Chat-Anhänge zurückgeben. Die maximale Dateigröße folgt `MAX_UPLOAD_MB`.
 
 ## Skills und Lernhilfe
 

@@ -11,6 +11,7 @@
     "dev:stop": "node scripts/dev-stop.mjs",
     "build": "tsc --noEmit && vite build && tsc -p tsconfig.server.json",
     "start": "node scripts/start.mjs",
+    "antigravity:bridge": "node scripts/antigravity-bridge.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",

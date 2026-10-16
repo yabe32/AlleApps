@@ -669,19 +669,23 @@ function RenderMessage({ m, zoom, chatId }: { m: Message; zoom: (id: string) => 
         <div className="message-images">
           {m.attachments.map((id) => (
             <div key={id}>
-              <button
-                className="image-button"
-                onClick={() => zoom(id)}
-                aria-label="Bild vergrößern"
-              >
-                <img
-                  src={'/api/files/' + id}
-                  alt={m.role === 'user' ? 'Hochgeladenes Bild' : 'Erzeugtes Bild'}
-                  loading="lazy"
-                />
-              </button>
+              {m.attachmentMeta?.[id]?.mime.startsWith('video/') ? (
+                <video className="message-video" src={'/api/files/' + id} controls preload="metadata" />
+              ) : m.attachmentMeta?.[id]?.mime.startsWith('image/') || !m.attachmentMeta?.[id] ? (
+                <button
+                  className="image-button"
+                  onClick={() => zoom(id)}
+                  aria-label="Bild vergrößern"
+                >
+                  <img
+                    src={'/api/files/' + id}
+                    alt={m.role === 'user' ? 'Hochgeladenes Bild' : 'Erzeugtes Bild'}
+                    loading="lazy"
+                  />
+                </button>
+              ) : null}
               <a className="quiet" href={'/api/files/' + id + '?download=1'} download>
-                <Download size={14} /> Herunterladen
+                <Download size={14} /> {m.attachmentMeta?.[id]?.name || 'Herunterladen'}
               </a>
             </div>
           ))}
@@ -705,6 +709,7 @@ function App() {
     [selected, setSelected] = useState<string | null>(null),
     [snap, setSnap] = useState<Snapshot | null>(null),
     [draft, setDraft] = useState(''),
+    [provider, setProvider] = useState<'codex' | 'antigravity'>(() => localStorage.getItem('chatProvider') === 'antigravity' ? 'antigravity' : 'codex'),
     [deepResearch, setDeepResearch] = useState(false),
     [attachments, setAttachments] = useState<string[]>([]),
     [uploading, setUploading] = useState(false),
@@ -730,6 +735,7 @@ function App() {
     cameraInput = useRef<HTMLInputElement>(null), documentInput = useRef<HTMLInputElement>(null),
     textarea = useRef<HTMLTextAreaElement>(null),
     active = useRef<string | null>(null),
+    activeLocalTurn = useRef<{ chatId: string; turnId: string } | null>(null),
     pending = useRef<any>(null),
     pendingBranch = useRef<any>(null);
   const refreshAuth = useCallback(async () => {
@@ -853,6 +859,12 @@ function App() {
     }
   }, [draft]);
   const running = snap?.turns.some((t) => ['starting', 'running'].includes(t.status)) || false;
+  useEffect(() => {
+    if (snap?.chat.provider) {
+      setProvider(snap.chat.provider);
+      localStorage.setItem('chatProvider', snap.chat.provider);
+    }
+  }, [snap?.chat.id, snap?.chat.provider]);
   async function act(fn: () => Promise<void>) {
     setError('');
     try {
@@ -863,7 +875,7 @@ function App() {
   }
   async function newChat() {
     await act(async () => {
-      const c = await api<Chat>('/chats', 'POST');
+      const c = await api<Chat>('/chats', 'POST', { provider });
       setSelected(c.id);
       setNav(false);
       setDraft('');
@@ -935,21 +947,82 @@ function App() {
       throw Error('Das HEIC/HEIF-Foto konnte auf diesem Gerät nicht lokal in JPEG konvertiert werden. Bitte es als JPEG teilen oder erneut auswählen.');
     }
   }
+  async function runLocalGemini(chatId: string, turnId: string, chat: Chat, text: string, fileIds: string[], useResearch: boolean) {
+    const files: Array<{ name: string; mime: string; data: string }> = [];
+    for (const id of fileIds) {
+      const metaResponse = await fetch('/api/files/' + id + '?meta=1', { credentials: 'same-origin' });
+      if (!metaResponse.ok) throw Error('Ein Gemini-Anhang konnte nicht geladen werden.');
+      const meta = await metaResponse.json();
+      const fileResponse = await fetch('/api/files/' + id, { credentials: 'same-origin' });
+      if (!fileResponse.ok) throw Error('Ein Gemini-Anhang konnte nicht geladen werden.');
+      const bytes = new Uint8Array(await fileResponse.arrayBuffer());
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 32768)
+        binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
+      files.push({ name: meta.name, mime: meta.mime, data: btoa(binary) });
+    }
+    let response: Response;
+    try {
+      response = await fetch('http://127.0.0.1:34791/turn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, turnId, text, files, deepResearch: useResearch, conversationId: chat.antigravity_conversation_id || '' }),
+        targetAddressSpace: 'loopback',
+      } as RequestInit & { targetAddressSpace: 'loopback' });
+    } catch {
+      throw Error('Lokale Antigravity-Brücke nicht erreichbar. Starte npm run antigravity:bridge auf diesem PC und erlaube den lokalen Netzwerkzugriff im Browser.');
+    }
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw Error(result.error || 'Die lokale Antigravity-Brücke ist nicht erreichbar.');
+    const generated: string[] = [];
+    for (const image of result.images || []) {
+      const raw = atob(image.data);
+      const bytes = Uint8Array.from(raw, (character) => character.charCodeAt(0));
+      const form = new FormData();
+      form.append('image', new File([bytes.buffer as ArrayBuffer], image.name || 'gemini-image.png', { type: image.mime || 'image/png' }));
+      const saved = await api<{ id: string }>('/uploads', 'POST', form);
+      generated.push(saved.id);
+    }
+    await api('/chats/' + chatId + '/complete-local', 'POST', {
+      turnId, text: result.text || '', attachments: generated, conversationId: result.conversationId || '',
+    });
+  }
   async function send() {
     if (sending || running || uploading || (!draft.trim() && !attachments.length)) return;
     setSending(true);
     await act(async () => {
       let cid = selected;
+      let chat: Chat;
       if (!cid) {
-        const c = await api<Chat>('/chats', 'POST');
-        cid = c.id;
+        chat = await api<Chat>('/chats', 'POST', { provider });
+        cid = chat.id;
         setSelected(cid);
-      }
+      } else chat = snap?.chat.id === cid ? snap.chat : await api<Chat>('/chats/' + cid);
       const body = { text: draft, attachments, deepResearch };
       const signature = JSON.stringify({ cid, ...body });
       if (pending.current?.signature !== signature)
         pending.current = { signature, key: crypto.randomUUID() };
-      await api('/chats/' + cid + '/send', 'POST', { ...body, key: pending.current.key });
+      if (chat.provider === 'antigravity') {
+        const turn = await api<any>('/chats/' + cid + '/send-local', 'POST', { ...body, key: pending.current.key });
+        activeLocalTurn.current = { chatId: cid, turnId: turn.id };
+        try {
+          setSnap(await api('/chats/' + cid));
+          await runLocalGemini(cid, turn.id, chat, draft, attachments, deepResearch);
+        } catch (error) {
+          if (activeLocalTurn.current?.turnId !== turn.id) {
+            pending.current = null;
+            return;
+          }
+          await api('/chats/' + cid + '/complete-local', 'POST', {
+            turnId: turn.id, text: '', attachments: [], conversationId: '', error: (error as Error).message,
+          }).catch(() => {});
+          throw error;
+        } finally {
+          activeLocalTurn.current = null;
+        }
+      } else {
+        await api('/chats/' + cid + '/send', 'POST', { ...body, key: pending.current.key });
+      }
       pending.current = null;
       setDraft('');
       setAttachments([]);
@@ -1044,7 +1117,7 @@ function App() {
               }}
             >
               <MessageSquare size={16} />
-              <span>{c.title}<small>{(c as any).project_name || ''}{(c as any).tags?.length ? ' · ' + (c as any).tags.join(', ') : ''}</small></span>
+              <span>{c.title}<small>{c.provider === 'antigravity' ? 'Gemini' : 'ChatGPT'}{(c as any).project_name ? ' · ' + (c as any).project_name : ''}{(c as any).tags?.length ? ' · ' + (c as any).tags.join(', ') : ''}</small></span>
               {c.parent_id && <GitBranch size={13} />}
             </button>
           ))}
@@ -1180,7 +1253,8 @@ function App() {
                     {m.role === 'user' ? (
                       <button
                         className="quiet"
-                        disabled={running || sending}
+                        disabled={running || sending || snap.chat.provider === 'antigravity'}
+                        title={snap.chat.provider === 'antigravity' ? 'Gemini-Unterhaltungen können derzeit nicht verzweigt werden.' : undefined}
                         onClick={() => {
                           setEdit(m);
                           setEditText(m.text);
@@ -1192,7 +1266,8 @@ function App() {
                       i === snap.messages.length - 1 && (
                         <button
                           className="quiet"
-                          disabled={running || sending}
+                          disabled={running || sending || snap.chat.provider === 'antigravity'}
+                          title={snap.chat.provider === 'antigravity' ? 'Gemini-Unterhaltungen können derzeit nicht erneut generiert werden.' : undefined}
                           onClick={() => {
                             const u = [...snap.messages]
                               .reverse()
@@ -1246,6 +1321,22 @@ function App() {
             }}
           >
             <div className="research-control">
+              <label className="provider-control">
+                <span>Modell für neue Chats</span>
+                <select
+                  aria-label="Modell für neue Chats"
+                  value={provider}
+                  disabled={sending || running}
+                  onChange={(e) => {
+                    const next = e.target.value as 'codex' | 'antigravity';
+                    setProvider(next);
+                    localStorage.setItem('chatProvider', next);
+                  }}
+                >
+                  <option value="codex">ChatGPT</option>
+                  <option value="antigravity">Gemini (Google AI Pro)</option>
+                </select>
+              </label>
               <button
                 type="button"
                 className={'research-toggle' + (deepResearch ? ' active' : '')}
@@ -1306,7 +1397,7 @@ function App() {
               <div>
                 <button
                   className="icon"
-                  aria-label="Bilder anhängen"
+                  aria-label="Dateien anhängen"
                   disabled={uploading}
                   onClick={() => fileInput.current?.click()}
                 >
@@ -1322,7 +1413,7 @@ function App() {
                 </button>
                 <button className="icon" aria-label="Dokument anhängen" disabled={uploading} onClick={() => documentInput.current?.click()}><Paperclip size={16} /></button>
                 <span className="upload-note">
-                  {uploading ? 'Anhang wird geprüft …' : 'Text, Bilder & Dokumente'}
+                  {uploading ? 'Anhang wird geprüft …' : 'Text, Bilder, Videos & Dokumente'}
                 </span>
               </div>
               {running ? (
@@ -1331,7 +1422,17 @@ function App() {
                   aria-label="Antwort stoppen"
                   onClick={() =>
                     act(async () => {
+                      const localTurn = activeLocalTurn.current;
+                      if (localTurn) {
+                        await fetch('http://127.0.0.1:34791/cancel', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ turnId: localTurn.turnId }),
+                          targetAddressSpace: 'loopback',
+                        } as RequestInit & { targetAddressSpace: 'loopback' }).catch(() => {});
+                      }
                       await api('/chats/' + selected + '/stop', 'POST');
+                      activeLocalTurn.current = null;
                     })
                   }
                 >
@@ -1360,14 +1461,14 @@ function App() {
           hidden
           ref={fileInput}
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif"
+          accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif,video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi"
           multiple
           onChange={(e) => {
             void upload(e.target.files);
             e.target.value = '';
           }}
         />
-        <input hidden ref={documentInput} type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" multiple onChange={(e) => { void upload(e.target.files); e.target.value = ''; }} />
+        <input hidden ref={documentInput} type="file" accept=".pdf,.docx,.xlsx,.csv,.txt,.mp4,.mov,.webm,.avi,video/mp4,video/quicktime,video/webm,video/x-msvideo" multiple onChange={(e) => { void upload(e.target.files); e.target.value = ''; }} />
         <input
           hidden
           ref={cameraInput}

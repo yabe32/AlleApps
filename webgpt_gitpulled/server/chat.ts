@@ -99,11 +99,12 @@ export class Chats extends EventEmitter {
     attachments: string[],
     userId?: string,
     deepResearch = false,
+    local = false,
   ) {
     if (deepResearch && this.cfg.webSearch === 'disabled')
       throw fail('Tiefenrecherche benötigt die aktivierte integrierte Websuche.', 409);
     const hash = createHash('sha256')
-      .update(JSON.stringify({ chatId, text, attachments, ...(deepResearch ? { deepResearch: true } : {}) }))
+      .update(JSON.stringify({ chatId, text, attachments, ...(deepResearch ? { deepResearch: true } : {}), ...(local ? { local: true } : {}) }))
       .digest('hex');
     const old = this.store.get<Turn>('SELECT * FROM turns WHERE request_key=?', key);
     if (old) {
@@ -113,6 +114,8 @@ export class Chats extends EventEmitter {
     }
     const chat = this.store.chat(chatId, userId);
     if (!chat) throw fail('Gespräch nicht gefunden.', 404);
+    if (local !== (chat.provider === 'antigravity'))
+      throw fail('Der gewählte Anbieter passt nicht zu diesem Gespräch.', 409);
     if (userId) {
       const user = this.store.get<{ rate_limit_per_hour: number; token_limit_five_hours: number; token_limit_week: number; image_limit_per_hour: number; web_search_limit_per_hour: number; parallel_turn_limit: number }>(
         'SELECT rate_limit_per_hour,token_limit_five_hours,token_limit_week,image_limit_per_hour,web_search_limit_per_hour,parallel_turn_limit FROM users WHERE id=? AND active=1',
@@ -199,6 +202,12 @@ export class Chats extends EventEmitter {
         this.store.run("INSERT INTO usage_events(user_id,kind,created_at) VALUES (?,'turn',?)", userId, Date.now());
     })();
     this.publish(chatId);
+    if (local) {
+      this.store.run("UPDATE turns SET status='running' WHERE id=?", id);
+      this.watchIdleTurn(id, chatId);
+      this.publish(chatId);
+      return this.store.get<Turn>('SELECT * FROM turns WHERE id=?', id)!;
+    }
     this.watchIdleTurn(id, chatId);
     // A cancelled preparation must finish before a new turn can initialize the same thread.
     const preparation = (this.starts.get(chatId) || Promise.resolve()).then(() =>
@@ -210,9 +219,45 @@ export class Chats extends EventEmitter {
     });
     return this.store.get<Turn>('SELECT * FROM turns WHERE id=?', id)!;
   }
+  completeLocal(
+    chatId: string,
+    turnId: string,
+    text: string,
+    attachments: string[],
+    conversationId: string,
+    error: string | undefined,
+    userId?: string,
+  ) {
+    const chat = this.store.chat(chatId, userId);
+    const turn = this.store.get<Turn>('SELECT * FROM turns WHERE id=? AND chat_id=?', turnId, chatId);
+    if (!chat || chat.provider !== 'antigravity' || !turn)
+      throw fail('Gemini-Unterhaltung nicht gefunden.', 404);
+    if (turn.status === 'completed' || turn.status === 'failed') return turn;
+    if (turn.status !== 'running') throw fail('Diese Gemini-Antwort wurde bereits gestoppt.', 409);
+    this.clearIdleTimer(turnId);
+    if (error) {
+      const safe = error.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [entfernt]').slice(0, 280);
+      this.store.run("UPDATE turns SET status='failed',error=? WHERE id=?", 'Antigravity-CLI: ' + safe, turnId);
+    } else {
+      for (const artifactId of attachments)
+        if (!this.artifacts.record(artifactId, chat.user_id || undefined))
+          throw fail('Ein erzeugtes Bild wurde nicht gefunden.', 404);
+      if (conversationId && conversationId.length <= 160)
+        this.store.run('UPDATE chats SET antigravity_conversation_id=? WHERE id=?', conversationId, chatId);
+      this.message(chatId, turnId, 'antigravity', text, true, attachments);
+      this.store.run("UPDATE turns SET status='completed',error=NULL WHERE id=?", turnId);
+      if (attachments.length && chat.user_id)
+        this.store.run("INSERT INTO usage_events(user_id,kind,created_at) VALUES (?,'image',?)", chat.user_id, Date.now());
+      this.store.run('UPDATE chats SET updated_at=? WHERE id=?', Date.now(), chatId);
+    }
+    this.publish(chatId);
+    return this.store.get<Turn>('SELECT * FROM turns WHERE id=?', turnId)!;
+  }
   private async start(id: string, text: string, attachments: string[]) {
     const t = this.store.get<Turn>('SELECT * FROM turns WHERE id=?', id)!;
     try {
+      if (this.store.chat(t.chat_id)?.provider === 'antigravity')
+        throw Error('Gemini benötigt den lokalen Antigravity-Dienst auf deinem PC.');
       if (!this.rpc.ready)
         throw Error('Codex ist nicht verbunden. In den Einstellungen neu verbinden.');
       const a = await this.rpc.request('account/read', { refreshToken: true });
@@ -299,13 +344,22 @@ export class Chats extends EventEmitter {
     }
   }
   async stop(chat: string, userId?: string) {
-    if (!this.store.chat(chat, userId)) throw fail('Gespräch nicht gefunden.', 404);
+    const chatRecord = this.store.chat(chat, userId);
+    if (!chatRecord) throw fail('Gespräch nicht gefunden.', 404);
     const t = this.store.get<Turn>(
       "SELECT * FROM turns WHERE chat_id=? AND status IN ('starting','running')",
       chat,
     );
     if (!t) return;
     this.clearIdleTimer(t.id);
+    if (chatRecord.provider === 'antigravity') {
+      this.store.run(
+        "UPDATE turns SET status='interrupted',error=COALESCE(error,'Antwort gestoppt.') WHERE id=? AND status IN ('starting','running')",
+        t.id,
+      );
+      this.publish(chat);
+      return;
+    }
     if (!t.codex_id) {
       if (t.status === 'starting') {
         this.store.run("UPDATE turns SET status='interrupted' WHERE id=?", t.id);
@@ -527,7 +581,12 @@ export class Chats extends EventEmitter {
   private watchIdleTurn(turnId: string, chatId: string) {
     this.clearIdleTimer(turnId);
     const turn = this.store.get<Turn>('SELECT * FROM turns WHERE id=? AND chat_id=?', turnId, chatId);
-    const timeoutMs = turn?.research_mode ? deepResearchIdleTimeoutMs : this.cfg.turnIdleMs;
+    const provider = this.store.chat(chatId)?.provider;
+    const timeoutMs = provider === 'antigravity'
+      ? 15 * 60 * 1000
+      : turn?.research_mode
+        ? deepResearchIdleTimeoutMs
+        : this.cfg.turnIdleMs;
     const timer = setTimeout(() => {
       this.idleTimers.delete(turnId);
       const active = this.store.get<Turn>(
@@ -538,9 +597,11 @@ export class Chats extends EventEmitter {
       if (!active) return;
       this.store.run(
         "UPDATE turns SET status='interrupted',error=? WHERE id=?",
-        active.research_mode
-          ? 'Tiefenrecherche wegen sechs Stunden ohne Codex-Fortschritt gestoppt. Die Teilantwort bleibt gespeichert.'
-          : 'Antwort wegen drei Minuten ohne neuen Text oder Bild gestoppt. Teilantwort bleibt gespeichert.',
+        this.store.chat(chatId)?.provider === 'antigravity'
+          ? 'Gemini-Antwort nach fünfzehn Minuten beendet. Bitte erneut versuchen.'
+          : active.research_mode
+            ? 'Tiefenrecherche wegen sechs Stunden ohne Codex-Fortschritt gestoppt. Die Teilantwort bleibt gespeichert.'
+            : 'Antwort wegen drei Minuten ohne neuen Text oder Bild gestoppt. Teilantwort bleibt gespeichert.',
         turnId,
       );
       this.publish(chatId);
@@ -588,6 +649,8 @@ export class Chats extends EventEmitter {
       chatId,
     );
     if (!original || !m) throw fail('Nachricht nicht gefunden.', 404);
+    if (original.provider === 'antigravity')
+      throw fail('Gemini-Unterhaltungen lassen sich derzeit nicht als Zweig starten.', 409);
     const sourceTurn = this.store.get<Turn>('SELECT * FROM turns WHERE id=?', m.turn_id);
     if (
       this.store.get(
@@ -684,6 +747,7 @@ export function friendly(e: any) {
   if (/Codex|Bild|Backend|Gespräch|verbunden|anmelden/.test(s)) return s.slice(0, 350);
   return 'Die Anfrage ist fehlgeschlagen. Bitte Verbindung und Anmeldung prüfen.';
 }
+
 function friendlyImage(e: any) {
   const message = String(e?.message || '');
   if (/quota|usage.?limit|rate.?limit|Kontingent/i.test(message))

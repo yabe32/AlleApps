@@ -66,8 +66,8 @@ export function createApp(cfg: Config, rpc: Rpc) {
           imgSrc: ["'self'", 'blob:'],
           fontSrc: ["'self'"],
           connectSrc: cfg.production
-            ? ["'self'"]
-            : ["'self'", 'ws://localhost:*', 'ws://127.0.0.1:*'],
+            ? ["'self'", 'http://127.0.0.1:34791']
+            : ["'self'", 'ws://localhost:*', 'ws://127.0.0.1:*', 'http://127.0.0.1:34791'],
           objectSrc: ["'none'"],
           frameAncestors: ["'none'"],
           upgradeInsecureRequests: cfg.secure ? [] : null,
@@ -506,7 +506,10 @@ export function createApp(cfg: Config, rpc: Rpc) {
       );
     res.json(chatsResult.map((chat) => ({ ...chat, tags: (() => { try { const tags = JSON.parse(chat.tags || '[]'); return Array.isArray(tags) ? tags : []; } catch { return []; } })() })));
   });
-  app.post('/api/chats', (_req, res) => res.status(201).json(store.create('Neue Unterhaltung', null, null, res.locals.session.user_id)));
+  app.post('/api/chats', (req, res) => {
+    const { provider } = z.object({ provider: z.enum(['codex', 'antigravity']).default('codex') }).parse(req.body || {});
+    res.status(201).json(store.create('Neue Unterhaltung', null, null, res.locals.session.user_id, provider));
+  });
   app.get('/api/chats/:id', (req, res) => res.json(store.snapshot(id.parse(req.params.id), res.locals.session.user_id)));
   app.patch('/api/chats/:id', (req, res) => {
     const cid = id.parse(req.params.id);
@@ -584,7 +587,19 @@ export function createApp(cfg: Config, rpc: Rpc) {
     for (const f of v.attachments)
       if (!store.get('SELECT id FROM artifacts WHERE id=? AND user_id=?', f, res.locals.session.user_id))
         throw Object.assign(Error('Bild nicht gefunden.'), { status: 404 });
-    res.status(202).json(await chats.send(id.parse(req.params.id), v.key, v.text, v.attachments, res.locals.session.user_id, v.deepResearch));
+    res.status(202).json(await chats.send(id.parse(req.params.id), v.key, v.text, v.attachments, res.locals.session.user_id, v.deepResearch, false));
+  });
+  app.post('/api/chats/:id/send-local', async (req, res) => {
+    const v = z.object({ key: id, text: z.string().max(100000), attachments: z.array(id).max(12), deepResearch: z.boolean().default(false) })
+      .refine((v) => v.text.trim() || v.attachments.length).parse(req.body);
+    for (const artifactId of v.attachments)
+      if (!store.get('SELECT id FROM artifacts WHERE id=? AND user_id=?', artifactId, res.locals.session.user_id))
+        throw Object.assign(Error('Anhang nicht gefunden.'), { status: 404 });
+    res.status(202).json(await chats.send(id.parse(req.params.id), v.key, v.text, v.attachments, res.locals.session.user_id, v.deepResearch, true));
+  });
+  app.post('/api/chats/:id/complete-local', (req, res) => {
+    const v = z.object({ turnId: id, text: z.string().max(100000).default(''), attachments: z.array(id).max(12).default([]), conversationId: z.string().max(160).default(''), error: z.string().max(1000).optional() }).parse(req.body);
+    res.json(chats.completeLocal(id.parse(req.params.id), v.turnId, v.text, v.attachments, v.conversationId, v.error, res.locals.session.user_id));
   });
   app.post('/api/chats/:id/stop', async (req, res) => {
     await chats.stop(id.parse(req.params.id), res.locals.session.user_id);
@@ -692,8 +707,8 @@ export function createApp(cfg: Config, rpc: Rpc) {
   });
   app.post('/api/documents', upload.single('document'), async (req, res) => {
     if (!req.file) throw Object.assign(Error('Datei fehlt.'), { status: 400 });
-    const allowed: Record<string, string> = { '.pdf': 'application/pdf', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.csv': 'text/csv', '.txt': 'text/plain' };
-    const ext = path.extname(req.file.originalname).toLowerCase(), mime = allowed[ext]; if (!mime) throw Object.assign(Error('Erlaubt sind PDF, DOCX, XLSX, CSV und TXT.'), { status: 415 });
+    const allowed: Record<string, string> = { '.pdf': 'application/pdf', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.csv': 'text/csv', '.txt': 'text/plain', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.avi': 'video/x-msvideo' };
+    const ext = path.extname(req.file.originalname).toLowerCase(), mime = allowed[ext]; if (!mime) throw Object.assign(Error('Erlaubt sind PDF, DOCX, XLSX, CSV, TXT sowie MP4, MOV, WebM und AVI.'), { status: 415 });
     res.status(201).json({ id: await artifacts.saveDocument(req.file.buffer, req.file.originalname, mime, res.locals.session.user_id), name: req.file.originalname, mime });
   });
   app.get('/api/files/:id', (req, res) => {
@@ -706,10 +721,11 @@ export function createApp(cfg: Config, rpc: Rpc) {
       return;
     }
     const artifact = artifacts.record(fid)!;
+    if (req.query.meta === '1') return res.json({ id: fid, mime: artifact.mime, name: artifact.original_name || (artifact.mime === 'image/png' ? 'bild.png' : 'Datei') });
     res.set({
       'Content-Type': artifact.mime,
       'Cache-Control': 'no-store',
-      'Content-Disposition': `${req.query.download || artifact.mime !== 'image/png' ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(artifact.original_name || 'bild-' + fid + '.png')}`,
+      'Content-Disposition': `${req.query.download || (!artifact.mime.startsWith('image/') && !artifact.mime.startsWith('video/')) ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(artifact.original_name || 'bild-' + fid + '.png')}`,
     });
     res.sendFile(artifacts.file(fid, artifact.mime === 'image/png'), { dotfiles: 'allow' });
   });
