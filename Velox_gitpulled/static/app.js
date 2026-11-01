@@ -11,6 +11,7 @@ const state = {
   previewVocabulary: [],
   previewRequest: 0,
   awaitingContinue: false,
+  answerSubmitting: false,
   throughTimer: null,
   paused: false,
   activeStudyListId: null,
@@ -273,6 +274,7 @@ async function startQuiz() {
 
 function showQuiz() {
   state.awaitingContinue = false;
+  setAnswerContinueMode(false);
   $("#answer-form").classList.remove("hidden");
   $(".prompt-label", $(".prompt-card")).textContent = "Übersetze";
   $(".keyboard-help", $(".prompt-card")).innerHTML = `<kbd>Enter</kbd> prüfen und sofort weiter`;
@@ -282,6 +284,16 @@ function showQuiz() {
   $("#quiz-feedback").textContent = "";
   $("#mark-correct-button").classList.add("hidden");
   renderQuiz();
+}
+
+function setAnswerContinueMode(continuing) {
+  const input = $("#answer-input");
+  input.placeholder = continuing ? "Enter = weiter" : "Deutsche Übersetzung …";
+  $("#answer-label").textContent = continuing ? "Weiter zur nächsten Vokabel" : "Deutsche Übersetzung";
+  $("#answer-form button[type=submit]").setAttribute(
+    "aria-label",
+    continuing ? "Weiter zur nächsten Vokabel" : "Antwort absenden",
+  );
 }
 
 function renderQuiz(result = null) {
@@ -344,40 +356,57 @@ function showWrongReveal(result) {
   feedback.innerHTML = `<strong>${escapeHtml(result.foreign_text)}</strong> war falsch beantwortet.`;
   $(".prompt-label", $(".prompt-card")).textContent = "Richtige Antwort";
   $("#quiz-word").textContent = result.expected;
-  $("#answer-form").classList.add("hidden");
+  $("#answer-input").value = "";
+  setAnswerContinueMode(true);
+  $("#answer-form").classList.remove("hidden");
   $("#mark-correct-button").classList.remove("hidden");
   $(".keyboard-help", $(".prompt-card")).innerHTML = `<kbd>Enter</kbd> weiter${state.quiz.mode === "block" ? " · dieselbe Vokabel kommt sofort erneut" : ""}`;
-  $("#answer-input").blur();
 }
 
 async function continueAfterWrong() {
-  if (!state.quiz || !state.awaitingContinue) return;
+  if (!state.quiz || !state.awaitingContinue || state.answerSubmitting) return;
+  state.answerSubmitting = true;
+  const input = $("#answer-input");
+  const submitButton = $("#answer-form button[type=submit]");
+  input.focus({preventScroll: true});
+  submitButton.disabled = true;
   try {
     const continued = await api(`/api/quiz/${state.quiz.token}/continue`, {method: "POST"});
     state.quiz = {...state.quiz, ...continued};
     state.awaitingContinue = false;
+    setAnswerContinueMode(false);
     $(".prompt-label", $(".prompt-card")).textContent = "Übersetze";
     $("#answer-form").classList.remove("hidden");
     $("#mark-correct-button").classList.add("hidden");
     $(".keyboard-help", $(".prompt-card")).innerHTML = `<kbd>Enter</kbd> prüfen`;
     renderQuiz();
   } catch (error) { toast(error.message, true); }
+  finally {
+    state.answerSubmitting = false;
+    submitButton.disabled = false;
+  }
 }
 
 async function markCorrect() {
-  if (!state.quiz || !state.awaitingContinue) return;
+  if (!state.quiz || !state.awaitingContinue || state.answerSubmitting) return;
+  state.answerSubmitting = true;
   const button = $("#mark-correct-button");
   button.disabled = true;
+  $("#answer-input").focus({preventScroll: true});
   try {
     const corrected = await api(`/api/quiz/${state.quiz.token}/mark-correct`, {method: "POST"});
     state.quiz = {...state.quiz, ...corrected};
     state.awaitingContinue = false;
+    setAnswerContinueMode(false);
     $("#answer-form").classList.remove("hidden");
     $("#mark-correct-button").classList.add("hidden");
     toast("Antwort wurde als richtig gewertet.");
     renderQuiz();
   } catch (error) { toast(error.message, true); }
-  finally { button.disabled = false; }
+  finally {
+    state.answerSubmitting = false;
+    button.disabled = false;
+  }
 }
 
 async function advanceThrough() {
@@ -398,8 +427,17 @@ function toggleThroughPause() {
 async function submitAnswer(event) {
   event.preventDefault();
   const input = $("#answer-input");
-  if (!input.value.trim() || input.disabled) return;
-  input.disabled = true;
+  if (state.awaitingContinue) {
+    void continueAfterWrong();
+    return;
+  }
+  if (!input.value.trim() || state.answerSubmitting) return;
+  state.answerSubmitting = true;
+  const submitButton = $("#answer-form button[type=submit]");
+  // Focus synchronously in the submit gesture so mobile browsers keep the
+  // virtual keyboard open while the request is in flight.
+  input.focus({preventScroll: true});
+  submitButton.disabled = true;
   try {
     const response = await api(`/api/quiz/${state.quiz.token}/answer`, {
       method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({answer: input.value})
@@ -410,8 +448,8 @@ async function submitAnswer(event) {
   } catch (error) {
     toast(error.message, true);
   } finally {
-    input.disabled = false;
-    if (!state.awaitingContinue) input.focus();
+    state.answerSubmitting = false;
+    submitButton.disabled = false;
   }
 }
 
@@ -765,6 +803,21 @@ function bindEvents() {
   $("#timer-toggle").addEventListener("change", event => $("#timer-seconds-label").classList.toggle("hidden", !event.target.checked));
   $("#start-quiz").addEventListener("click", startQuiz);
   $("#answer-form").addEventListener("submit", submitAnswer);
+  // Keep focus on the answer field when the on-screen keyboard's action key
+  // submits the form. This lets mobile browsers leave the virtual keyboard open.
+  $("#answer-input").addEventListener("keydown", event => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    $("#answer-form").requestSubmit();
+  });
+  // Tapping the arrow button should submit without transferring focus away
+  // from the input (which would dismiss the mobile keyboard).
+  $("#answer-form button[type=submit]").addEventListener("pointerdown", event => {
+    event.preventDefault();
+  });
+  $("#mark-correct-button").addEventListener("pointerdown", event => {
+    event.preventDefault();
+  });
   $("#mark-correct-button").addEventListener("click", markCorrect);
   $("#quit-quiz").addEventListener("click", returnToSetup);
   $("#restart-setup").addEventListener("click", returnToSetup);
